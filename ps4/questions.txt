@@ -1,0 +1,13 @@
+i. If strcmp returns 0, the two strings passed as arguments are equal.
+ii.
+    int max;
+    if (!strcmp(g.level, "debug")) {
+        max = 9;
+    else {
+        max = 1024;
+    }
+iii. sscanf might return 2 if n isn't an integer (followed by another number)
+iv. The cursor is represented by y and x.
+v. show_cursor() makes the cursor appear at the current cordinates
+vi. New keystrokes can be listened to after line 186.
+vii. Debug #1 has 1 blank, debug #2 has 2, and debug #9 has 9.

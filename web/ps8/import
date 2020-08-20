@@ -1,0 +1,43 @@
+#!/usr/bin/php
+
+<?
+    // check for correct number of args
+    if ($argc !== 2) {
+        print("Usage: import file\n");
+        return 1;
+    }
+
+    // constants
+    require_once("constants.php");
+
+    // connect to database server
+    $connection = mysqli_connect("localhost:8889", "root", "root");
+
+    // select database
+    mysqli_select_db($connection, DB_NAME);
+    
+    // read file
+    $filename = $argv[1];
+    $fp = fopen($filename, "r");
+    if ($fp === FALSE) {
+        print("Could not open $file.\n");
+        return 2;
+    }
+
+    // first row
+    $row = fgetcsv($fp);
+
+    // load rows into DB
+    while (($row = fgetcsv($fp)) !== FALSE) {
+        if ($row[1] === "P") {
+            $sql = "
+                INSERT INTO " . TBL_NAME . " (ZipCode, Population, Latitude, Longitude, State, City)
+                VALUES ('$row[0]', $row[2], $row[16], $row[17], '$row[19]', '$row[24]')
+            ";
+            mysqli_query($connection, $sql);
+        }
+    }
+    
+    fclose($fp);
+    return 0;
+?>

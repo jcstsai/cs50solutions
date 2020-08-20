@@ -1,0 +1,11 @@
+0. The longest word in our dictionary (45 letters).
+1. getrusage describes the resources used by the current process, returning a struct of information.
+2. There are 16 members in this struct.
+3. We pass by reference because they’re structs (and so we can just pass the addresses, which are smaller than the data).
+4. We read in each word from the file character by character, using fgetc(). If a given character is in the alphabet or an apostrophe, we add it to the current word. If a character is numeric, we ignore its word. If we find any other character, we know to complete a word. After we have a whole word we run it through the check() function, and print the word if it is misspelled.
+5. When using fscanf, we’d have to special-case all of the whitespace characters (newlines, return carriages, and tabs). However, by reading in character by character we can simply check isAlpha().
+6. The const parameters cannot be changed, preventing dictionary.c from changing anything that was passed in.
+7. I used a 100000-entry hash table, whose entries were linked lists of nodes. Each node is a word with a pointer to the next word in the list, and is terminated with a null-word node.
+8. My code was almost instantaneous the first time.
+9. None
+10. No bottlenecks

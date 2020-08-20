@@ -1,0 +1,32 @@
+/****************************************************************************
+ * styles.css
+ *
+ * Computer Science 50
+ * Problem Set 7
+ *
+ * Global stylesheet.
+ ****************************************************************************
+
+
+/* elements */
+
+body
+{
+  background: #ffffff;
+  color: #000000;
+  font-family: sans-serif;
+}
+
+form
+{
+  margin: 0px;
+}
+
+
+/* classes */
+
+.field
+{
+  padding: 5px;
+  text-align: right;
+}

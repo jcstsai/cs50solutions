@@ -1,0 +1,17 @@
+0. BMP supports up to 2^32 (alternatively 2^24, 2^16, 2^8, 2^4, 2), GIF supports any 256 colors out of the possible 2^24, and JPEG supports 2^24
+1. GIF supports animation
+2. Lossy can lose some of the original data; lossless can not.
+3. BMP files are not compressed, GIF is lossless, JPEG is lossy.
+4. When a file is deleted, the data is not actually deleted (just deallocated).
+5. You can overwrite the file area with zeros.
+6. BYTE = 1 byte; DWORD = 4 bytes; LONG = 4 bytes; WORD = 2 bytes
+7. A BMP must begin with 0x42, 0x4d.
+8. bfsize = size of the total file, bisize = the size of just the data without the headers
+9. If biheight is negative, this means the image is top-down (origin at the top left)
+10. biBitCount defines the number of bits per color
+11. fopen might return null if the file doesn't exist.
+12. We only want to read one file object.
+13. (4 - (3 * 3 % 4)) % 4 = 1
+14. fseek moves us to a given offset in the file.
+15. SEEK_CUR is a constant that can be passed to fseek matching the current position in the file.
+16. It was Colonel Mustard in the study with the lead pipe.
