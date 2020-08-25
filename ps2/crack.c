@@ -6,7 +6,7 @@
 #include <string.h>
 #include <unistd.h>
 
-int generate_strings(char *input, int length, char letters[], char *prefix, char salt[]);
+int generate_strings(char *input, char *salt, int currentPos, int length, char *letters, int lettersLength, char *prefix);
 
 int main(int argc, char *argv[]) {
     if (argc != 2) {
@@ -42,17 +42,14 @@ int main(int argc, char *argv[]) {
     }
     
     // Attempt to check all combinations of letters
-    char lower_letters[26] = "abcdefghijklmnopqrstuvwxyz";
-    char upper_letters[26] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-    sprintf(guess, "%s", "");
+    char letters[52] =
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
     for (int i = 0; i < 6; i++) {
-        printf("%d\n", i);
-        if (generate_strings(input, i+1, lower_letters, "", salt) == 0) {
+        char *prefix = malloc(sizeof(char) * (i+2));
+        if (generate_strings(input, salt, 0, i+1, letters, 52, prefix) == 0) {
             return 0;
         }
-        if (generate_strings(input, i+1, upper_letters, "", salt) == 0) {
-            return 0;
-        }
+        free(prefix);
     }
         
     // check all combinations upper- and lowercase characters, numbers, and symbols
@@ -60,10 +57,13 @@ int main(int argc, char *argv[]) {
         "1234567890`~!@#$%^&*()-_+=[{]}\\|;:'\",<.>/?";
     sprintf(guess, "%s", "");
     for (int i = 0; i < 9; i++) {
-        printf("%d\n", i);
-        if (generate_strings(input, i+1, symbols, "", salt) == 0) {
+        char *prefix = malloc(sizeof(char) * (i+2));
+
+        if (generate_strings(input, salt, 0, i+1, symbols, 94, prefix) == 0) {
+            free(prefix);
             return 0;
         }
+        free(prefix);
     }
         
     printf("Failed to crack the password.\n");
@@ -71,28 +71,30 @@ int main(int argc, char *argv[]) {
 }
 
 /**
- * Recursively generate all strings from the given set of letters.
+ * Recursively generate and check all strings of a given length from the given set of letters.
  */
-int generate_strings(char *input, int length, char letters[], char *prefix, char salt[]) {
-    if (length == 0) {
+int generate_strings(
+                     char *input,
+                     char *salt,
+                     int currentPos,
+                     int length,
+                     char *letters,
+                     int lettersLength,
+                     char *prefix) {
+    if (currentPos == length) {
+        prefix[currentPos] = '\0';
         if (strcmp(input, crypt(prefix, salt)) == 0) {
             printf("%s\n", prefix);
             return 0;
         } else {
-            printf("%s\n", prefix);
             return 1;
         }
     } else {
-        for (int i = 0; i < 74; i++) {
-            char newLetter = letters[i];
-            char *newString = malloc(sizeof(char) * (strlen(prefix) + 1));
-            strncpy(newString, prefix, strlen(prefix));
-            newString[strlen(prefix)] = newLetter;
-            newString[strlen(prefix)+1] = '\0';
-            if (generate_strings(input, length - 1, letters, newString, salt) == 0) {
+        for (int i = 0; i < lettersLength; i++) {
+            prefix[currentPos] = letters[i];
+            if (generate_strings(input, salt, currentPos + 1, length, letters, lettersLength, prefix) == 0) {
                 return 0;
             }
-            free(newString);
         }
         return 1;
     }
