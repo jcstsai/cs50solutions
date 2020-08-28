@@ -57,7 +57,7 @@ search(int value, int array[], int n)
 void 
 sort(int values[], int n)
 {
-    int *newlist = malloc((n+1) * sizeof(int));
+    int *newlist = malloc(n * sizeof(int));
     int newlistIndex = 0;
     
     for (int i = 0; i < LIMIT; i++) {
