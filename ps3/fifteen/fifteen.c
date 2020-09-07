@@ -43,14 +43,15 @@ typedef struct boardList {
 typedef struct node {
     int board[DIM_MAX][DIM_MAX];
     intList *moves;
-    int f;
-    int g;
     struct node *next;
 } node;
 
 // global board
 int board[DIM_MAX][DIM_MAX];
 int d;
+
+// god mode globals
+node *path;
 
 // optimal solution
 intList *optimalSolution;
@@ -64,12 +65,11 @@ void draw();
 
 // God mode prototypes
 intList *solve();
-node *runAStar(int[DIM_MAX][DIM_MAX], int rowNumber);
-node *createNode(node *, node *, boardList *, int, int, int, int, int);
-int h(int[DIM_MAX][DIM_MAX], int rowNumber);
-bool inOpenSet(boardList *, int[DIM_MAX][DIM_MAX]);
-void insertIntoOpenSet(boardList *, int[DIM_MAX][DIM_MAX]);
-node *insertIntoQueue(node *, node *);
+node *runIDAStar(int[DIM_MAX][DIM_MAX]);
+int search(int, int);
+bool boardInPath(int, int, int, int);
+void prependSuccessorNode(int, int, int, int);
+int h(int[DIM_MAX][DIM_MAX]);
 
 // Normal mode prototypes
 bool move();
@@ -261,233 +261,211 @@ draw()
  * returns the solution
  */
 intList *solve() {
-    // Local variable for intermediate board
-    int intermediateBoard[DIM_MAX][DIM_MAX];
-    for (int i = 0; i < d; i++) {
-        for (int j = 0; j < d; j++) {
-            intermediateBoard[i][j] = board[i][j];
-        }
-    }
-    
-    // Keep track of the moves so far
-    intList *result;
-    
-    // Solve using the heuristic of going row by row
-    for (int i = 0; i < d - 1; i++) {
-        printf("Thinking: row %d\n", i);
-        int rowNumber = i;
-        if (i == d - 2) rowNumber = d;
-        
-        node *queue = runAStar(intermediateBoard, rowNumber);
-                
-        // free the first queue node (except for the result)
-        intList *partialResult = queue->moves;
-        for (int j = 0; j < d; j++) {
-            for (int k = 0; k < d; k++) {
-                intermediateBoard[j][k] = queue->board[j][k];
-            }
-        }
-        node *queueNode = queue;
-        queue = queue->next;
-        free(queueNode);
-        
-        // free the rest of the queue
-        while (queue != NULL) {
-            queueNode = queue;
-            queue = queue->next;
+    // Solve using IDA*
+    path = runIDAStar(board);
             
-            intList *movesNode;
-            while (queueNode->moves != NULL) {
-                movesNode = queueNode->moves;
-                queueNode->moves = queueNode->moves->next;
-                free(movesNode);
-            }
-            free(queueNode);
-        }
+    // free the first path node (except for the result)
+    intList *result = path->moves;
+    node *firstPathNode = path;
+    path = path->next;
+    free(firstPathNode);
+    
+    // free the rest of the path
+    while (path != NULL) {
+        node *pathNode = path;
+        path = path->next;
         
-        // Append partial result to result
-        if (result == NULL) {
-            result = partialResult;
-        } else {
-            // find the end of result and point it to the new list
-            intList *resultEnd = result;
-            while (resultEnd->next != NULL) {
-                resultEnd = resultEnd->next;
-            }
-            resultEnd->next = partialResult;
+        intList *movesNode;
+        while (pathNode->moves != NULL) {
+            movesNode = pathNode->moves;
+            pathNode->moves = pathNode->moves->next;
+            free(movesNode);
         }
+        free(pathNode);
     }
-
+    
+    // return the optimal path
     return result;
 }
 
-node* runAStar(int prevBoard[DIM_MAX][DIM_MAX], int rowNumber) {
-    // Begin the priority queue with the root node
-    node *queue = malloc(sizeof(node));
+node* runIDAStar(int board[DIM_MAX][DIM_MAX]) {
+    // Set initial bound
+    int bound = h(board);
+        
+    // Begin the path (in reverse, like a stack)) with the root node
+    path = malloc(sizeof(node));
     for (int i = 0; i < d; i++) {
         for (int j = 0; j < d; j++) {
-            queue->board[i][j] = prevBoard[i][j];
+            path->board[i][j] = board[i][j];
         }
     }
-    queue->f = h(prevBoard, rowNumber);
-    queue->g = 0;
-    queue->moves = malloc(sizeof(intList));
-    queue->moves->value = 0;
-    queue->moves->next = NULL;
-    queue->next = NULL;
+    path->moves = malloc(sizeof(intList));
+    path->moves->value = 0;
+    path->moves->next = NULL;
+    path->next = NULL;
     
-    // Begin the open set with the original board
-    boardList *openSet = malloc(sizeof(boardList));
-    for (int i = 0; i < d; i++) {
-        for (int j = 0; j < d; j++) {
-            openSet->board[i][j] = prevBoard[i][j];
-        }
+    while (1) {
+        int t = search(0, bound);
+        if (t == 0) return path;
+        bound = t;
     }
-    openSet->next = NULL;
-    
-    // Run A*
-    while (queue != NULL) {
-        int i,j,tileI,tileJ;
-        
-        // return if we found the solution
-        if (h(queue->board, rowNumber) == 0) {
-            // free the open set
-            boardList *openSetNode;
-            while (openSet != NULL) {
-                openSetNode = openSet;
-                openSet = openSet->next;
-                free(openSetNode);
-            }
-            
-            // return the algorithm result
-            return queue;
-        }
-
-        // Find tile 0 and store its coordinates in x and y
-        for (i = 0; i < d; i++) {
-            for (j = 0; j < d; j++) {
-                if (queue->board[i][j] == 0) {
-                    tileI = i;
-                    tileJ = j;
-                }
-            }
-        }
-        
-        // pop queue
-        node *currentNode = queue;
-        queue = queue->next;
-        
-        // Determine possible moves and add them to the queue
-        // up
-        if (tileI > 0) {
-            queue = createNode(currentNode, queue, openSet, tileI, tileJ, tileI-1, tileJ, rowNumber);
-        }
-        
-        // down
-        if (tileI < d-1) {
-            queue = createNode(currentNode, queue, openSet, tileI, tileJ, tileI+1, tileJ, rowNumber);
-        }
-        
-        // left
-        if (tileJ > 0) {
-            queue = createNode(currentNode, queue, openSet, tileI, tileJ, tileI, tileJ-1, rowNumber);
-        }
-        
-        // right
-        if (tileJ < d-1) {
-            queue = createNode(currentNode, queue, openSet, tileI, tileJ, tileI, tileJ+1, rowNumber);
-        }
-    }
-    
-    return NULL;
 }
 
-/*
- * node *createNode
- * Creates a new node given the current node, the queue, and move (i,j) -> (newI,newJ)
- */
-node *createNode(node *currentNode, node *queue, boardList *openSet, int tileI, int tileJ, int newTileI, int newTileJ, int rowNumber) {
-    // create new node
-    node *newNode = malloc(sizeof(node));
-    newNode->next = NULL;
+int search(int g, int bound) {
+    int f = g + h(path->board);
+    if (f > bound) return f;
+    if (h(path->board) == 0) return 0;
+    int min = 2000000000;
     
-    // set the new node's board
-    int swapValue = currentNode->board[newTileI][newTileJ];
+    // check successors
+    // Find tile 0 and store its coordinates in x and y
+    int tileI;
+    int tileJ;
     for (int i = 0; i < d; i++) {
         for (int j = 0; j < d; j++) {
-            newNode->board[i][j] = currentNode->board[i][j];
+            if (path->board[i][j] == 0) {
+                tileI = i;
+                tileJ = j;
+            }
         }
     }
-    newNode->board[newTileI][newTileJ] = 0;
-    newNode->board[tileI][tileJ] = swapValue;
-    
-    // check board against the closed set
-    if (inOpenSet(openSet, newNode->board)) {
-        return queue;
-    } else {
-        insertIntoOpenSet(openSet, newNode->board);
+    // up
+    if ((tileI > 0) && !boardInPath(tileI, tileJ, tileI-1, tileJ)) {
+        prependSuccessorNode(tileI, tileJ, tileI-1, tileJ);
+        int t = search(g + 1, bound);
+        if (t == 0) return 0;
+        if (t < min) min = t;
+        node *oldPath = path;
+        path = path->next;
+        intList *movesNode;
+        while (oldPath->moves != NULL) {
+            movesNode = oldPath->moves;
+            oldPath->moves = oldPath->moves->next;
+            free(movesNode);
+        }
+        free(oldPath);
     }
-    
-    // add value to the list of moves
-    intList *currentQueueMove = currentNode->moves;
-    intList *currentNewNodeMove = malloc(sizeof(intList));
-    intList *newNodeMoves = currentNewNodeMove;
-    while (currentQueueMove != NULL) {
-        currentNewNodeMove->value = currentQueueMove->value;
-        currentNewNodeMove->next = malloc(sizeof(intList));
-        
-        currentQueueMove = currentQueueMove->next;
-        currentNewNodeMove = currentNewNodeMove->next;
+    // down
+    if ((tileI < d-1) && !boardInPath(tileI, tileJ, tileI+1, tileJ)) {
+        prependSuccessorNode(tileI, tileJ, tileI+1, tileJ);
+        int t = search(g + 1, bound);
+        if (t == 0) return 0;
+        if (t < min) min = t;
+        node *oldPath = path;
+        path = path->next;
+        intList *movesNode;
+        while (oldPath->moves != NULL) {
+            movesNode = oldPath->moves;
+            oldPath->moves = oldPath->moves->next;
+            free(movesNode);
+        }
+        free(oldPath);
     }
-    currentNewNodeMove->value = swapValue;
-    currentNewNodeMove->next = NULL;
-    newNode->moves = newNodeMoves;
-    
-    
-    // update value
-    newNode->f = currentNode->g + 1 + h(newNode->board, rowNumber);
-    newNode->g = currentNode->g + 1;
-    
-    // insert into the priority queue
-    queue = insertIntoQueue(queue, newNode);
-    
-    return queue;
+    // left
+    if ((tileJ > 0) && !boardInPath(tileI, tileJ, tileI, tileJ-1)) {
+        prependSuccessorNode(tileI, tileJ, tileI, tileJ-1);
+        int t = search(g + 1, bound);
+        if (t == 0) return 0;
+        if (t < min) min = t;
+        node *oldPath = path;
+        path = path->next;
+        intList *movesNode;
+        while (oldPath->moves != NULL) {
+            movesNode = oldPath->moves;
+            oldPath->moves = oldPath->moves->next;
+            free(movesNode);
+        }
+        free(oldPath);
+    }
+    // right
+    if ((tileJ < d-1) && !boardInPath(tileI, tileJ, tileI, tileJ+1)) {
+        prependSuccessorNode(tileI, tileJ, tileI, tileJ+1);
+        int t = search(g + 1, bound);
+        if (t == 0) return 0;
+        if (t < min) min = t;
+        node *oldPath = path;
+        path = path->next;
+        intList *movesNode;
+        while (oldPath->moves != NULL) {
+            movesNode = oldPath->moves;
+            oldPath->moves = oldPath->moves->next;
+            free(movesNode);
+        }
+        free(oldPath);
+    }
+    // return the minimum f
+    return min;
 }
 
-/*
- * bool inOpenSet
- * Returns whether the given board is in the closed set
+/**
+ * Checks that a successor board isn't already in path
  */
-bool inOpenSet(boardList *openSet, int board[DIM_MAX][DIM_MAX]) {
-    boardList *boardListCopy = openSet;
-    bool areEqual = true;
-    while (boardListCopy != NULL) {
+bool boardInPath(int tileI, int tileJ, int newTileI, int newTileJ) {
+    // get the successor board
+    int successorBoard[DIM_MAX][DIM_MAX];
+    int swapValue = path->board[newTileI][newTileJ];
+    for (int i = 0; i < d; i++) {
+        for (int j = 0; j < d; j++) {
+            successorBoard[i][j] = path->board[i][j];
+        }
+    }
+    successorBoard[newTileI][newTileJ] = 0;
+    successorBoard[tileI][tileJ] = swapValue;
+    
+    node *pathPtr = path;
+    while (pathPtr != NULL) {
+        bool boardMatch = true;
         for (int i = 0; i < d; i++) {
             for (int j = 0; j < d; j++) {
-                if (boardListCopy->board[i][j] != board[i][j]) {
-                    areEqual = false;
+                if (pathPtr->board[i][j] != successorBoard[i][j]) {
+                    boardMatch = false;
                 }
             }
         }
-        if (areEqual) return true;
-        boardListCopy = boardListCopy->next;
+        if (boardMatch) return true;
+        pathPtr = pathPtr->next;
     }
+    
     return false;
 }
 
-/*
- * void insertIntoOpenSet
- * Inserts the given board into the open set.
+/**
+ * prepend a successor node onto path
  */
-void insertIntoOpenSet(boardList *openSet, int board[DIM_MAX][DIM_MAX]) {
-    boardList *newBoardList = malloc(sizeof(boardList));
+void prependSuccessorNode(int tileI, int tileJ, int newTileI, int newTileJ) {
+    // get the successor board
+    int successorBoard[DIM_MAX][DIM_MAX];
+    int swapValue = path->board[newTileI][newTileJ];
     for (int i = 0; i < d; i++) {
         for (int j = 0; j < d; j++) {
-            newBoardList->board[i][j] = board[i][j];
+            successorBoard[i][j] = path->board[i][j];
         }
     }
-    newBoardList->next = openSet;
-    openSet = newBoardList;
+    successorBoard[newTileI][newTileJ] = 0;
+    successorBoard[tileI][tileJ] = swapValue;
+    
+    // add value to the list of moves
+    intList *currentMovesPtr = path->moves;
+    intList *successorMoves = malloc(sizeof(intList));
+    intList *successorMovesPtr = successorMoves;
+    while (currentMovesPtr != NULL) {
+        successorMovesPtr->value = currentMovesPtr->value;
+        successorMovesPtr->next = malloc(sizeof(intList));
+        
+        successorMovesPtr = successorMovesPtr->next;
+        currentMovesPtr = currentMovesPtr->next;
+    }
+    successorMovesPtr->value = swapValue;
+    successorMovesPtr->next = NULL;
+    
+    // push successor node onto path and return it
+    node *newPath = malloc(sizeof(node));
+    for (int i = 0; i < d; i++)
+        for (int j = 0; j < d; j++)
+            newPath->board[i][j] = successorBoard[i][j];
+    newPath->moves = successorMoves;
+    newPath->next = path;
+    path = newPath;
 }
 
 /*
@@ -495,11 +473,11 @@ void insertIntoOpenSet(boardList *openSet, int board[DIM_MAX][DIM_MAX]) {
  *
  * Computes the Manhattan-distance heuristic for a given board
  */
-int h(int board[DIM_MAX][DIM_MAX], int rowNumber) {
+int h(int board[DIM_MAX][DIM_MAX]) {
     int manhattanDistance = 0;
     for (int i = 0; i < d; i++) {
         for (int j = 0; j < d; j++) {
-            if (board[i][j] != 0 && (board[i][j] <= d * (rowNumber+1))) {
+            if (board[i][j] != 0) {
                 // horizontal distance
                 manhattanDistance += abs(j - ((board[i][j] - 1) % d));
                 // vertical distance
@@ -509,39 +487,6 @@ int h(int board[DIM_MAX][DIM_MAX], int rowNumber) {
     }
     
     return manhattanDistance;
-}
-
-/*
- * node *insertIntoQueue()
- *
- * Inserts the given node (respecting order) into the given queue
- */
-node *insertIntoQueue(node *queue, node *element) {
-    if (queue == NULL) {
-        return element;
-    }
-    
-    // does elt go in front?
-    if (element->f <= queue->f) {
-        element->next = queue;
-        return element;
-    }
-    
-    // otherwise, loop through
-    node *current = queue;
-    node *next = queue->next;
-    while (next != NULL) {
-        if (element->f <= next->f) {
-            current->next = element;
-            element->next = next;
-            return queue;
-        }
-        next = next->next;
-        current = current->next;
-    }
-    
-    current->next = element;
-    return queue;
 }
 
 /*
