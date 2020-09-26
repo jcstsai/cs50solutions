@@ -18,7 +18,6 @@
 #include <string.h>
 #include <time.h>
 
-
 // macro for processing control characters
 #define CTRL(x) ((x) & ~0140)
 
@@ -44,6 +43,12 @@ struct
     int y, x;
 } g;
 
+// struct for returning a hint
+typedef struct {
+    int x, y;
+    int value;
+} hintSquare;
+
 // prototypes
 void draw_grid();
 void draw_borders();
@@ -63,6 +68,7 @@ void shutdown();
 bool startup();
 
 // backtracker function prototype
+hintSquare getHint();
 bool backtrack();
 
 /*
@@ -275,8 +281,6 @@ main(int argc, char *argv[])
             // hint
             case 'H':
                 if (is_board_valid(g.board) && !isWon) {
-                    bool hintGiven = false;
-                    
                     // copy board
                     int board[9][9];
                     for (int i = 0; i < 9; i++) {
@@ -285,26 +289,12 @@ main(int argc, char *argv[])
                         }
                     }
                     
-                    // backtrack-check 1-9 for a blank square
-                    for (int i = 0; i < 9; i++) {
-                        for (int j = 0; j < 9; j++) {
-                            if (!hintGiven && board[i][j] == 0) {
-                                hintGiven = true;
-                                for (int k = 1; k < 10; k++) {
-                                    board[i][j] = k;
-                                    if (backtrack(board, i, j)) {
-                                        g.board[i][j] = k;
-                                        break;
-                                    }
-                                    char message[10];
-                                    show_banner(message);
-                                }
-                                draw_numbers();
-                                show_cursor();
-                            }
-                        }
-                    }
-
+                    // get a backtrack square
+                    hintSquare hint = getHint(board);
+                    g.board[hint.x][hint.y] = hint.value;
+                    
+                    draw_numbers();
+                    show_cursor();
                 }
                 break;
         }
@@ -858,37 +848,218 @@ startup()
 
 /******* Solver functions below *****/
 
-/*
- * void backtrack()
- * Checks if the given board has a viable solution
+
+/**
+ * Given a board, returns a numerical hint and square
  */
-bool backtrack(int board[9][9], int a, int b) {
-    bool solved = true;
+hintSquare getHint(int board[9][9]) {
+    hintSquare result;
     
-    if (!is_board_valid(board)) {
-        board[a][b] = 0;
-        return false;
-    }
-    
+    // figure out number of possibilities per square
+    int numPossibilities[9][9];
     for (int i = 0; i < 9; i++) {
         for (int j = 0; j < 9; j++) {
-            if (board[i][j] == 0) {
-                solved = false;
-                for (int k = 1; k < 10; k++) {
-                    board[i][j] = k;
-                    if (backtrack(board, i, j)) {
-                        return true;
+            // set numPossibilities to a sentinel value if filled in
+            if (board[i][j] != 0) {
+                numPossibilities[i][j] = 10;
+                continue;
+            }
+            
+            bool validNums[9];
+            for (int k = 0; k < 9; k++) {
+                validNums[k] = true;
+            }
+            
+            // invalidate entries in the same col
+            for (int k = 0; k < 9; k++) {
+                if (board[i][k] != 0) {
+                    validNums[board[i][k]-1] = false;
+                }
+            }
+            
+            // invalidate entries in the same row
+            for (int k = 0; k < 9; k++) {
+                if (board[k][j] != 0) {
+                    validNums[board[k][j]-1] = false;
+                }
+            }
+            // invalidate entries in the same box
+            for (int k = i/3*3; k < i/3*3+3; k++) {
+                for (int l = j/3*3; l < j/3*3+3; l++) {
+                    if (board[k][l] != 0) {
+                        validNums[board[k][l]-1] = false;
                     }
                 }
+            }
+            
+            int validNumsCount = 0;
+            for (int k = 0; k < 9; k++) {
+                if (validNums[k]) validNumsCount++;
+            }
+            numPossibilities[i][j] = validNumsCount;
+        }
+    }
+    
+    // Find a square with a small number of valid possibilities
+    int minPossibilities = 10;
+    int minPossibilitiesI = -1;
+    int minPossibilitiesJ = -1;
+    for (int i = 0; i < 9; i++) {
+        for (int j = 0; j < 9; j++) {
+            if (numPossibilities[i][j] < minPossibilities) {
+                minPossibilitiesI = i;
+                minPossibilitiesJ = j;
+                minPossibilities = numPossibilities[i][j];
             }
         }
     }
     
-    if (solved) {
-        return true;
-    } else {
-        board[a][b] = 0;
+    // Backtrack to figure out what goes in that square
+    for (int k = 1; k < 10; k++) {
+        bool isValid = true;
+        // invalidate entries in the same col
+        for (int l = 0; l < 9; l++) {
+            if (board[minPossibilitiesI][l] == k) {
+                isValid = false;
+            }
+        }
+        // invalidate entries in the same row
+        for (int l = 0; l < 9; l++) {
+            if (board[l][minPossibilitiesJ] == k) {
+                isValid = false;
+            }
+        }
+        // invalidate entries in the same box
+        for (int l = minPossibilitiesI/3*3; l < minPossibilitiesI/3*3+3; l++) {
+            for (int m = minPossibilitiesJ/3*3; m < minPossibilitiesJ/3*3+3; m++) {
+                if (board[l][m] == k) {
+                    isValid = false;
+                }
+            }
+        }
+        if (!isValid) continue;
+        
+        board[minPossibilitiesI][minPossibilitiesJ] = k;
+        if (backtrack(board)) {
+            result.x = minPossibilitiesI;
+            result.y = minPossibilitiesJ;
+            result.value = k;
+            return result;
+        }
+        board[minPossibilitiesI][minPossibilitiesJ] = 0;
+    }
+    
+    // should never get here
+    result.x = -1;
+    result.y = -1;
+    result.value = -1;
+    return result;
+}
+
+/**
+ * bool backtrack()
+ * Checks if the given board has a viable solution
+ */
+bool backtrack(int board[9][9]) {    
+    if (!is_board_valid(board)) {
         return false;
     }
+    
+    // figure out number of possibilities per square
+    int numPossibilities[9][9];
+    for (int i = 0; i < 9; i++) {
+        for (int j = 0; j < 9; j++) {
+            // set numPossibilities to a sentinel value if filled in
+            if (board[i][j] != 0) {
+                numPossibilities[i][j] = 10;
+                continue;
+            }
+            
+            bool validNums[9];
+            for (int k = 0; k < 9; k++) {
+                validNums[k] = true;
+            }
+            
+            // invalidate entries in the same col
+            for (int k = 0; k < 9; k++) {
+                if (board[i][k] != 0) {
+                    validNums[board[i][k]-1] = false;
+                }
+            }
+            
+            // invalidate entries in the same row
+            for (int k = 0; k < 9; k++) {
+                if (board[k][j] != 0) {
+                    validNums[board[k][j]-1] = false;
+                }
+            }
+            // invalidate entries in the same box
+            for (int k = i/3*3; k < i/3*3+3; k++) {
+                for (int l = j/3*3; l < j/3*3+3; l++) {
+                    if (board[k][l] != 0) {
+                        validNums[board[k][l]-1] = false;
+                    }
+                }
+            }
+            
+            int validNumsCount = 0;
+            for (int k = 0; k < 9; k++) {
+                if (validNums[k]) validNumsCount++;
+            }
+            numPossibilities[i][j] = validNumsCount;
+        }
+    }
+    
+    // Find a square with a small number of valid possibilities
+    int minPossibilities = 10;
+    int minPossibilitiesI = -1;
+    int minPossibilitiesJ = -1;
+    for (int i = 0; i < 9; i++) {
+        for (int j = 0; j < 9; j++) {
+            if (numPossibilities[i][j] < minPossibilities) {
+                minPossibilitiesI = i;
+                minPossibilitiesJ = j;
+                minPossibilities = numPossibilities[i][j];
+            }
+        }
+    }
+    
+    if (minPossibilities == 10) return true;
+    
+    // Try entries in the square with the smallest number of valid possibilities
+    if (board[minPossibilitiesI][minPossibilitiesJ] == 0) {
+        for (int k = 1; k < 10; k++) {
+            bool isValid = true;
+            // invalidate entries in the same col
+            for (int l = 0; l < 9; l++) {
+                if (board[minPossibilitiesI][l] == k) {
+                    isValid = false;
+                }
+            }
+            // invalidate entries in the same row
+            for (int l = 0; l < 9; l++) {
+                if (board[l][minPossibilitiesJ] == k) {
+                    isValid = false;
+                }
+            }
+            // invalidate entries in the same box
+            for (int l = minPossibilitiesI/3*3; l < minPossibilitiesI/3*3+3; l++) {
+                for (int m = minPossibilitiesJ/3*3; m < minPossibilitiesJ/3*3+3; m++) {
+                    if (board[l][m] == k) {
+                        isValid = false;
+                    }
+                }
+            }
+            if (!isValid) continue;
+            
+            board[minPossibilitiesI][minPossibilitiesJ] = k;
+            if (backtrack(board)) {
+                return true;
+            }
+            board[minPossibilitiesI][minPossibilitiesJ] = 0;
+        }
+    }
+    
+    return false;
 }
 
